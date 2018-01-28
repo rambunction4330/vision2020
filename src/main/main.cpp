@@ -29,7 +29,7 @@ const int iHighV = 135;
 // Camera data units in degrees and meters
 const double horizontalFOV = 51.43;
 const double verticalFOV = 20;
-const double mountYAngle = -6;
+const double mountYAngle = 9.10;
 const double mountXAngle = 0.0;
 const double mountHeight = 0.672;
 
@@ -151,6 +151,39 @@ void capture(int& i) {
   double height = capture.get(CAP_PROP_FRAME_HEIGHT);
 
   // Calculate the camera focal length in pixles
+  // Uses pinhole camera modle
+  // 
+  // Cpp standard library uses radients not degrees
+  //   degrees --> radients: * (pi/180)
+  //   radients --> degrees: * (180/pi)
+  //
+  // w = camera frame width (in pixles)
+  // θ = Feild of view (in degrees)
+  // f = focal length (in pixles)
+  //
+  // tan(θ°/2) = (w/2)/f
+  // 
+  // f = (w/2)/tan(θ°/2)
+  //
+  //  pinhole       / 
+  //        |      / 
+  // sensor |     /  
+  //  |     |    /   
+  //  |\    |   /    
+  //  | \   |  /     
+  //  |  \  | /      
+  //  |   \ |/       
+  // w|____\/_________
+  //  | f  /\ θ°
+  //  |   /  \
+  //  |  /    \
+  //  | /      \
+  //  |/        \
+  //             \
+  //              \
+  //               \
+  //                \
+  //
   double focalLength = (width/2)/(tan(((horizontalFOV * (M_PI/180))/2)));
 
   // Comparison shape for power port vision target
@@ -234,12 +267,73 @@ void capture(int& i) {
     Point2d loadingBayCenter(loadingBayMoms.m10/loadingBayMoms.m00, loadingBayMoms.m01/loadingBayMoms.m00);
 
     // Find the angle from the camera to the center of the image
-    double powerPortXAngle = atan((powerPortCenter.x - (width/2)) / focalLength) * (180/M_PI) + mountXAngle;
-    double powerPortYAngle = atan((powerPortCenter.y - (height/2)) / focalLength) * (180/M_PI) + mountYAngle;
-    double loadingBayXAngle = atan((loadingBayCenter.x - (width/2)) / focalLength) * (180/M_PI) + mountXAngle;
-    double loadingBayYAngle = atan((loadingBayCenter.y - (height/2)) / focalLength) * (180/M_PI) + mountYAngle;
+    // Uses pinhole camera modle
+    // 
+    // Cpp standard library uses radients not degrees
+    //   degrees --> radients: * (pi/180)
+    //   radients --> degrees: * (180/pi)
+    //
+    // w = camera frame width (in pixles)
+    // c = center of the target
+    // f = focal length (in pixles) 
+    // θ = angle of target from camera center
+    //
+    // tan(θ°) = (c-(w/2))/f
+    // 
+    // θ° = atan((c-(w/2))/f)
+    //
+    //  pinhole       / 
+    //        |      / 
+    // sensor |     /  
+    //  |     |    /   
+    //  |\    |   /    
+    //  | \   |  /     
+    // c*  \  | /      
+    //  |\_ \ |/       
+    // w|__\_\/_________
+    //  | f  /\\_ θ°
+    //  |   /  \ \_
+    //  |  /    \  \_
+    //  | /      \   \_
+    //  |/        \    \_
+    //             \     \
+    //              \     *
+    //               \
+    //                \
+    //
+    double powerPortXAngle = -atan((powerPortCenter.x - (width/2)) / focalLength) * (180/M_PI) + mountXAngle;
+    double powerPortYAngle = -atan((powerPortCenter.y - (height/2)) / focalLength) * (180/M_PI) + mountYAngle;
+    double loadingBayXAngle = -atan((loadingBayCenter.x - (width/2)) / focalLength) * (180/M_PI) + mountXAngle;
+    double loadingBayYAngle = -atan((loadingBayCenter.y - (height/2)) / focalLength) * (180/M_PI) + mountYAngle;
 
-    //using Y angle find the distance from the target
+    //Using Y angle find the distance from the target
+    //
+    // Cpp standard library uses radients not degrees
+    //   degrees --> radients: * (pi/180)
+    //   radients --> degrees: * (180/pi)
+    //
+    // h = height of the camera
+    // t = target height
+    // θ = angle to target
+    // d = distance to target
+    //
+    // tan(θ°) = (t-h)/d
+    //
+    // d = (t-h)/tan(θ°)
+    //
+    //                *target
+    //               /|
+    //              / |
+    //             /  |
+    //            /   |
+    //           /    |
+    //          /     |t
+    //         / θ°   |
+    // Camera /_ _ _ _|
+    //        |   d   |
+    //      h |       |
+    //        |_______| Ground
+    //
     double powerPortDistance = (powerPortHeight - mountHeight) / (tan(powerPortYAngle * (M_PI/180)));
     double loadingBayDistance = (loadingBayHeight - mountHeight) / (tan(loadingBayYAngle * (M_PI/180)));
 
