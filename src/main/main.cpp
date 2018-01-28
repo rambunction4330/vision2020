@@ -26,16 +26,25 @@ const int iHighS = 255;
 const int iLowV = 115;
 const int iHighV = 135;
 
-// Camera data
+// Camera data units in degrees and meters
 const double horizontalFOV = 70.42;
 const double verticalFOV = 43.3;
 const double diagonalFOV = 78;
+const double mountYAngle = 0.0;
+const double mountXAngle = 0.0;
+const double mountHeight = 0.0;
+
+//Target data units in meters
+const double powerPortHeight = 0.0;
+const double loadingBayHeight = 0.0;
 
 // Variables to hold data collected from vision
 double powerPortRelativeBearing = DONOTKNOW;
 double powerPortGlobalYAngle = DONOTKNOW;
+double powerPortGlobalDistance = DONOTKNOW;
 double loadingBayGlobalYAngle = DONOTKNOW;
 double loadingBayRelativeBearing = DONOTKNOW;
+double loadingBayGlobalDistance = DONOTKNOW;
 //pthread_mutex_t dataLock;
 std::mutex dataMutex;
 
@@ -46,7 +55,7 @@ void capture(int& arg);
 
 int main(void)
 {
-  int n, s;
+  int n, s;190
   socklen_t len;
   int max;
   int number;
@@ -226,10 +235,14 @@ void capture(int& i) {
     Point2d loadingBayCenter(loadingBayMoms.m10/loadingBayMoms.m00, loadingBayMoms.m01/loadingBayMoms.m00);
 
     // Find the angle from the camera to the center of the image
-    double powerPortXAngle = atan((powerPortCenter.x - (width/2)) / focalLength) * (180/M_PI);
-    double powerPortYAngle = atan((powerPortCenter.y - (height/2)) / focalLength) * (180/M_PI);
-    double loadingBayXAngle = atan((loadingBayCenter.x - (width/2)) / focalLength) * (180/M_PI);
-    double loadingBayYAngle = atan((loadingBayCenter.y - (height/2)) / focalLength) * (180/M_PI);
+    double powerPortXAngle = atan((powerPortCenter.x - (width/2)) / focalLength) * (180/M_PI) + mountXAngle;
+    double powerPortYAngle = atan((powerPortCenter.y - (height/2)) / focalLength) * (180/M_PI) + mountYAngle;
+    double loadingBayXAngle = atan((loadingBayCenter.x - (width/2)) / focalLength) * (180/M_PI) + mountXAngle;
+    double loadingBayYAngle = atan((loadingBayCenter.y - (height/2)) / focalLength) * (180/M_PI) + mountYAngle;
+
+    //using Y angle find the distance from the target
+    double powerPortDistance = (powerPortHeight - mountHeight) / (tan(abs(powerPortYAngle)));
+    double loadingBayDistance = (loadingBayHeight - mountHeight) / (tan(abs(loadingBayYAngle)));
 
     // obtain the lock and copy the data
     //pthread_mutex_lock(&dataLock);
@@ -237,21 +250,16 @@ void capture(int& i) {
 
     powerPortRelativeBearing = powerPortXAngle;
     powerPortGlobalYAngle = powerPortYAngle;
+    powerPortGlobalDistance = powerPortDistance;
     loadingBayRelativeBearing = loadingBayXAngle;
     loadingBayGlobalYAngle = loadingBayYAngle;
+    loadingBayGlobalDistance = loadingBayDistance;
 
     //pthread_mutex_unlock(&dataLock);
     dataMutex.unlock();
 
-//    cout << powerPortXAngle << ", " << loadingBayXAngle << endl;
+    cout  << loadingBayDistance << endl;
 
-//    imshow(rawWindow, frame);
-//    imshow(threshWindow, thresh);
-
-//    if (waitKey(10) == 27) {
-//      destroyAllWindows();
-//      break;
-//    }
   }
 }
 
@@ -280,8 +288,10 @@ void handleClient(int& ns) {
 
       double copyPowerPortRelativeBearing = powerPortRelativeBearing;
       double copyPowerPortGlobalYAngle = powerPortGlobalYAngle;
+      double copyPowerPortGlobalDistance = powerPortGlobalDistance;
       double copyLoadingBayRelativeBearing = loadingBayRelativeBearing;
       double copyLoadingBayGlobalYAngle = loadingBayGlobalYAngle;
+      double copyLoadingBayGlobalDistance = loadingBayGlobalDistance;
 
       //pthread_mutex_unlock(&dataLock);
       dataMutex.unlock();
@@ -291,11 +301,11 @@ void handleClient(int& ns) {
       if (isnan(copyPowerPortRelativeBearing) && isnan(copyLoadingBayRelativeBearing)) {
         sendbufferLen = sprintf(sendbuffer, "\n");
       } else if (isnan(copyPowerPortRelativeBearing)){
-        sendbufferLen = sprintf(sendbuffer, "lbrb=%.1f\nlbya=%.1f\n\n", copyLoadingBayRelativeBearing, copyLoadingBayGlobalYAngle);
+        sendbufferLen = sprintf(sendbuffer, "lbrb=%.1f\nlbya=%.1f\nlbd=%.1f\n\n", copyLoadingBayRelativeBearing, copyLoadingBayGlobalYAngle, copyLoadingBayGlobalDistance);
       } else if (isnan(copyLoadingBayRelativeBearing)){
-        sendbufferLen = sprintf(sendbuffer, "pprb=%.1f\nppya=%.1f\n\n", copyPowerPortRelativeBearing, copyPowerPortGlobalYAngle);
+        sendbufferLen = sprintf(sendbuffer, "pprb=%.1f\nppya=%.1f\nppd=%.1f\n\n", copyPowerPortRelativeBearing, copyPowerPortGlobalYAngle, copyPowerPortGlobalDistance);
       } else{
-        sendbufferLen = sprintf(sendbuffer, "pprb=%.1f\nppya=%.1f\nlbrb=%.1f\nlbya=%.1f\n\n", copyPowerPortRelativeBearing, copyPowerPortGlobalYAngle, copyLoadingBayRelativeBearing, copyLoadingBayGlobalYAngle);
+        sendbufferLen = sprintf(sendbuffer, "pprb=%.1f\nppya=%.1f\nppd=%.1f\nlbrb=%.1f\nlbya=%.1f\nlbd=%.1f\n\n", copyPowerPortRelativeBearing, copyPowerPortGlobalYAngle, copyPowerPortGlobalDistance, copyLoadingBayRelativeBearing, copyLoadingBayGlobalYAngle, copyLoadingBayGlobalDistance);
       }
       // write response to client
       write(ns, sendbuffer, sendbufferLen);
