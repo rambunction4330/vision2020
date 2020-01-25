@@ -26,8 +26,10 @@ const int iHighL = 140;
 const double horizontalFOV = 70.42;
 const double verticalFOV = 43.3;
 const double diagonalFOV = 78;
-double relativeBearing = DONOTKNOW;
-double globalYAngle = DONOTKNOW;
+double powerPortRelativeBearing = DONOTKNOW;
+double powerPortGlobalYAngle = DONOTKNOW;
+double loadingBayGlobalYAngle = DONOTKNOW;
+double loadingBayRelativeBearing = DONOTKNOW;
 pthread_mutex_t dataLock;
 
 // forward declaration of functions
@@ -115,7 +117,7 @@ int main(void)
 void *capture(void *arg) {  
 
   VideoCapture capture(0);
-  system("./startCam.sh")
+  system("../startCam.sh");
 
   if(!capture.isOpened()) {
     cout << "Failed to connect to the camera." << endl;
@@ -126,16 +128,23 @@ void *capture(void *arg) {
 
   Mat frame, hsv, thresh;
   //Ideal shape of high goal reflective tape.
-  std::vector<Point> shape;
-  shape.push_back(Point2d(0,0));
-  shape.push_back(Point2d(0,12));
-  shape.push_back(Point2d(2,12));
-  shape.push_back(Point2d(2,2));
-  shape.push_back(Point2d(18,2));
-  shape.push_back(Point2d(18,12));
-  shape.push_back(Point2d(20,12));
-  shape.push_back(Point2d(20,0));
-  shape.push_back(Point2d(0,0));
+  std::vector<Point> powerPortTarget;
+  powerPortTarget.push_back(Point2d(0,17));
+  powerPortTarget.push_back(Point2d(9.805,0));
+  powerPortTarget.push_back(Point2d(29.445,0));
+  powerPortTarget.push_back(Point2d(39.25,17));
+  powerPortTarget.push_back(Point2d(36.941,17));
+  powerPortTarget.push_back(Point2d(28.290,2));
+  powerPortTarget.push_back(Point2d(10.960,2));
+  powerPortTarget.push_back(Point2d(2.309,17));
+  powerPortTarget.push_back(Point2d(0,17));
+  
+  std::vector<Point> loadingBayTarget;
+  loadingBayTarget.push_back(Point2d(0,0));
+  loadingBayTarget.push_back(Point2d(0,11));
+  loadingBayTarget.push_back(Point2d(7,11));
+  loadingBayTarget.push_back(Point2d(7,0));
+  loadingBayTarget.push_back(Point2d(0,0));
 
   while(true) {
 		
@@ -150,26 +159,41 @@ void *capture(void *arg) {
     std::vector < std::vector<Point> > contours;
     findContours(thresh, contours, RETR_EXTERNAL, CHAIN_APPROX_NONE);
     
-    double bestMatch = DONOTKNOW;
-    std::vector<Point> bestContour;
-    Point2d pointOfBestShapeMatch;
+    double bestPowerPortMatch = DONOTKNOW;
+    double bestLoadingBayMatch = DONOTKNOW;
+    std::vector<Point> powerPortContour;
+    std::vector<Point> loadingBayContour;
 
-    for (auto it = contours::begin(); it != contours.end(); ++it) {
-      double match = matchShapes(shape, *it, CV_CONTOURS_MATCH_I2, 0);
-      if ( match < bestMatch && match != 0) {
-        bestContour = *it;
+    for (vector< vector<Point> >::iterator it = contours.begin(); it != contours.end(); ++it) {
+      double matchPowerPort = matchShapes(powerPortTarget, *it, CV_CONTOURS_MATCH_I2, 0);
+      double matchLoadingBay = matchShapes(powerPortTarget, *it, CV_CONTOURS_MATCH_I2, 0);
+
+      if ( matchPowerPort < bestPowerPortMatch && matchPowerPort != 0) {
+        bestPowerPortMatch = matchPowerPort;
+        powerPortContour = *it;
       }
-    }
 
-    const Moments moms = moments(Mat(bestContour));
-    Point2d center(mom.mm10/mom.mm00, mom.mm01/mom.mm00);
-    double xAngle = atan(center.x - (width/2) / focalLength;
-    double yAngle = atan(center.y - (height/2) / focalLength;
+      if ( matchLoadingBay < bestLoadingBayMatch && matchLoadingBay != 0 && matchLoadingBay > matchPowerPort) {
+        bestLoadingBayMatch = matchLoadingBay;
+        loadingBayContour = *it;
+      }
+
+
+    Moments powerPortMoms = moments(Mat(powerPortContour));
+    Moments loadingBayMoms = moments(Mat(loadingBayContour));
+    Point2d powerPortCenter(powerPortMoms.m10/powerPortMoms.m00, powerPortMoms.m01/powerPortMoms.m00);
+    Point2d loadingBayCenter(loadingBayMoms.m10/loadingBayMoms.m00, loadingBayMoms.m01/loadingBayMoms.m00);
+    double powerPortXAngle = atan(powerPortCenter.x - (width/2)) / focalLength;
+    double powerPortYAngle = atan(powerPortCenter.y - (height/2)) / focalLength;
+    double loadingBayXAngle = atan(loadingBayCenter.x - (width/2)) / focalLength;
+    double loadingBayYAngle = atan(loadingBayCenter.y - (height/2)) / focalLength;
 
     // obtain the lock and copy the data
     pthread_mutex_lock(&dataLock);
-    relativeBearing = xAngle;
-    globalYAngle = yAngle;
+    powerPortRelativeBearing = powerPortXAngle;
+    powerPortGlobalYAngle = powerPortYAngle;
+    loadingBayRelativeBearing = loadingBayXAngle;
+    loadingBayGlobalYAngle = loadingBayYAngle;
     pthread_mutex_unlock(&dataLock);
   }
 }
@@ -195,15 +219,24 @@ void *handleClient(void *arg) {
 
       // obtain the lock and copy the data
       pthread_mutex_lock(&dataLock);
-      double copyRelativeBearing = relativeBearing;
-      double copyGlobalYAngle = globalYAngle;
+      double copyPowerPortRelativeBearing = powerPortRelativeBearing;
+      double copyPowerPortGlobalYAngle = powerPortGlobalYAngle;
+      double copyLoadingBayRelativeBearing = loadingBayRelativeBearing;
+      double copyLoadingBayGlobalYAngle = loadingBayGlobalYAngle;
       pthread_mutex_unlock(&dataLock);
       
       // the protocol will send an empty line when the data transfer is complete
       int sendbufferLen = -1;
-      if ( copyRelativeBearing == DONOTKNOW ) {
+      if ( copyPowerPortRelativeBearing == DONOTKNOW && copyLoadingBayRelativeBearing == DONOTKNOW) {
         sendbufferLen = sprintf(sendbuffer, "\n");
-      } else {
+      } else if ( copyPowerPortRelativeBearing == DONOTKNOW ){
+        sendbufferLen = sprintf(sendbuffer, "lbrb=%.1f\nlbya=%.1f\n", copyLoadingBayRelativeBearing, copyLoadingBayGlobalYAngle);
+      } else if ( copyLoadingBayRelativeBearing == DONOTKNOW ){
+        sendbufferLen = sprintf(sendbuffer, "pprb=%.1f\nppya=%.1f\n", copyPowerPortRelativeBearing, copyPowerPortGlobalYAngle);
+      } else{
+        sendbufferLen = sprintf(sendbuffer, "pprb=%.1f\nppya=%.1f\nlbrb=%.1f\nlbya=%.1f\n", copyPowerPortRelativeBearing, copyPowerPortGlobalYAngle, copyLoadingBayRelativeBearing, copyLoadingBayGlobalYAngle);
+      }
+
         sendbufferLen = sprintf(sendbuffer, "rb=%.1f\nya=%.1f\n\n", copyRelativeBearing, copyGlobalYAngle);
       }
 
