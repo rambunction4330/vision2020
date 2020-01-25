@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 2.8)
+project( cameraTunning )
+find_package ( OpenCV REQUIRED )
+add_executable( cameraTunning cameraTunning.cpp )
+target_link_libraries ( cameraTunning ${OpenCV_LIBS})
