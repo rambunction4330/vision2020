@@ -177,7 +177,7 @@ void *capture(void *arg) {
         bestLoadingBayMatch = matchLoadingBay;
         loadingBayContour = *it;
       }
-
+    }
 
     Moments powerPortMoms = moments(Mat(powerPortContour));
     Moments loadingBayMoms = moments(Mat(loadingBayContour));
