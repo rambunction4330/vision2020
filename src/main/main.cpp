@@ -236,10 +236,6 @@ void *handleClient(void *arg) {
       } else{
         sendbufferLen = sprintf(sendbuffer, "pprb=%.1f\nppya=%.1f\nlbrb=%.1f\nlbya=%.1f\n", copyPowerPortRelativeBearing, copyPowerPortGlobalYAngle, copyLoadingBayRelativeBearing, copyLoadingBayGlobalYAngle);
       }
-
-        sendbufferLen = sprintf(sendbuffer, "rb=%.1f\nya=%.1f\n\n", copyRelativeBearing, copyGlobalYAngle);
-      }
-
       // write response to client
       write(ns, sendbuffer, sendbufferLen);
     } else {
