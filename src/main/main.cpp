@@ -17,12 +17,12 @@ using namespace std;
 using namespace cv;
 
 //added for further changes
-const int iLowH = 60;
-const int iHighH = 70;
+const int iLowH = 59;
+const int iHighH = 61;
 const int iLowS = 220; 
 const int iHighS = 255;
-const int iLowL = 100;
-const int iHighL = 140;
+const int iLowV = 115;
+const int iHighV = 135;
 const double horizontalFOV = 70.42;
 const double verticalFOV = 43.3;
 const double diagonalFOV = 78;
@@ -124,9 +124,8 @@ void *capture(void *arg) {
   }
   double width = capture.get(CAP_PROP_FRAME_WIDTH);
   double height = capture.get(CAP_PROP_FRAME_HEIGHT);
-  double focalLength = (width/2)/(tan((horizontalFOV/2) * (M_PI/180)));
+  double focalLength = (width/2)/(tan(((horizontalFOV * (M_PI/180))/2)));
 
-  Mat frame, hsv, thresh;
   //Ideal shape of high goal reflective tape.
   std::vector<Point> powerPortTarget;
   powerPortTarget.push_back(Point2d(0,17));
@@ -146,15 +145,21 @@ void *capture(void *arg) {
   loadingBayTarget.push_back(Point2d(7,0));
   loadingBayTarget.push_back(Point2d(0,0));
 
+//  String rawWindow = "Raw";
+//  String threshWindow = "Thresh";
+//  namedWindow(rawWindow, WINDOW_NORMAL);
+//  namedWindow(threshWindow, WINDOW_NORMAL);
+
   while(true) {
-		
+    Mat frame, hsv, thresh;	
     capture >> frame;
+
     if(frame.empty()) {
       cout << "failed to capture an image" << endl;
     }
      
-    cvtColor(frame, hsv, CV_BGR2HLS);
-    inRange(hsv, Scalar(iLowH, iLowS, iLowL), Scalar(iHighH, iHighS, iHighL), thresh);
+    cvtColor(frame, hsv, CV_BGR2HSV);
+    inRange(hsv, Scalar(iLowH, iLowS, iLowV), Scalar(iHighH, iHighS, iHighV), thresh);
 
     std::vector < std::vector<Point> > contours;
     findContours(thresh, contours, RETR_EXTERNAL, CHAIN_APPROX_NONE);
@@ -166,16 +171,21 @@ void *capture(void *arg) {
 
     for (vector< vector<Point> >::iterator it = contours.begin(); it != contours.end(); ++it) {
       double matchPowerPort = matchShapes(powerPortTarget, *it, CV_CONTOURS_MATCH_I2, 0);
-      double matchLoadingBay = matchShapes(powerPortTarget, *it, CV_CONTOURS_MATCH_I2, 0);
+      double matchLoadingBay = matchShapes(loadingBayTarget, *it, CV_CONTOURS_MATCH_I2, 0);
 
-      if ( matchPowerPort < bestPowerPortMatch && matchPowerPort != 0) {
+      cout << matchPowerPort << ", " << matchLoadingBay << endl;
+
+      if ( matchPowerPort < bestPowerPortMatch && matchPowerPort != 0 && matchPowerPort < matchLoadingBay) {
         bestPowerPortMatch = matchPowerPort;
         powerPortContour = *it;
       }
-
-      if ( matchLoadingBay < bestLoadingBayMatch && matchLoadingBay != 0 && matchLoadingBay > matchPowerPort) {
+      if ( matchLoadingBay < bestLoadingBayMatch && matchLoadingBay != 0 && matchLoadingBay < matchPowerPort) {
         bestLoadingBayMatch = matchLoadingBay;
         loadingBayContour = *it;
+        
+      }
+      else {
+        cout << "whoops!" << endl;
       }
     }
 
@@ -183,10 +193,10 @@ void *capture(void *arg) {
     Moments loadingBayMoms = moments(Mat(loadingBayContour));
     Point2d powerPortCenter(powerPortMoms.m10/powerPortMoms.m00, powerPortMoms.m01/powerPortMoms.m00);
     Point2d loadingBayCenter(loadingBayMoms.m10/loadingBayMoms.m00, loadingBayMoms.m01/loadingBayMoms.m00);
-    double powerPortXAngle = atan(powerPortCenter.x - (width/2)) / focalLength;
-    double powerPortYAngle = atan(powerPortCenter.y - (height/2)) / focalLength;
-    double loadingBayXAngle = atan(loadingBayCenter.x - (width/2)) / focalLength;
-    double loadingBayYAngle = atan(loadingBayCenter.y - (height/2)) / focalLength;
+    double powerPortXAngle = atan((powerPortCenter.x - (width/2)) / focalLength) * (180/M_PI);
+    double powerPortYAngle = atan((powerPortCenter.y - (height/2)) / focalLength) * (180/M_PI);
+    double loadingBayXAngle = atan((loadingBayCenter.x - (width/2)) / focalLength) * (180/M_PI);
+    double loadingBayYAngle = atan((loadingBayCenter.y - (height/2)) / focalLength) * (180/M_PI);
 
     // obtain the lock and copy the data
     pthread_mutex_lock(&dataLock);
@@ -195,6 +205,16 @@ void *capture(void *arg) {
     loadingBayRelativeBearing = loadingBayXAngle;
     loadingBayGlobalYAngle = loadingBayYAngle;
     pthread_mutex_unlock(&dataLock);
+
+//    cout << powerPortXAngle << ", " << loadingBayXAngle << endl;
+
+//    imshow(rawWindow, frame);
+//    imshow(threshWindow, thresh);
+
+//    if (waitKey(10) == 27) {
+//      destroyAllWindows();
+//      break;
+//    }
   }
 }
 
