@@ -173,8 +173,6 @@ void *capture(void *arg) {
       double matchPowerPort = matchShapes(powerPortTarget, *it, CV_CONTOURS_MATCH_I2, 0);
       double matchLoadingBay = matchShapes(loadingBayTarget, *it, CV_CONTOURS_MATCH_I2, 0);
 
-      cout << matchPowerPort << ", " << matchLoadingBay << endl;
-
       if ( matchPowerPort < bestPowerPortMatch && matchPowerPort != 0 && matchPowerPort < matchLoadingBay) {
         bestPowerPortMatch = matchPowerPort;
         powerPortContour = *it;
@@ -183,9 +181,6 @@ void *capture(void *arg) {
         bestLoadingBayMatch = matchLoadingBay;
         loadingBayContour = *it;
         
-      }
-      else {
-        cout << "whoops!" << endl;
       }
     }
 
@@ -244,17 +239,17 @@ void *handleClient(void *arg) {
       double copyLoadingBayRelativeBearing = loadingBayRelativeBearing;
       double copyLoadingBayGlobalYAngle = loadingBayGlobalYAngle;
       pthread_mutex_unlock(&dataLock);
-      
+
       // the protocol will send an empty line when the data transfer is complete
       int sendbufferLen = -1;
-      if ( copyPowerPortRelativeBearing == DONOTKNOW && copyLoadingBayRelativeBearing == DONOTKNOW) {
+      if (isnan(copyPowerPortRelativeBearing) && isnan(copyLoadingBayRelativeBearing)) {
         sendbufferLen = sprintf(sendbuffer, "\n");
-      } else if ( copyPowerPortRelativeBearing == DONOTKNOW ){
-        sendbufferLen = sprintf(sendbuffer, "lbrb=%.1f\nlbya=%.1f\n", copyLoadingBayRelativeBearing, copyLoadingBayGlobalYAngle);
-      } else if ( copyLoadingBayRelativeBearing == DONOTKNOW ){
-        sendbufferLen = sprintf(sendbuffer, "pprb=%.1f\nppya=%.1f\n", copyPowerPortRelativeBearing, copyPowerPortGlobalYAngle);
+      } else if (isnan(copyPowerPortRelativeBearing)){
+        sendbufferLen = sprintf(sendbuffer, "lbrb=%.1f\nlbya=%.1f\n\n", copyLoadingBayRelativeBearing, copyLoadingBayGlobalYAngle);
+      } else if (isnan(copyLoadingBayRelativeBearing)){
+        sendbufferLen = sprintf(sendbuffer, "pprb=%.1f\nppya=%.1f\n\n", copyPowerPortRelativeBearing, copyPowerPortGlobalYAngle);
       } else{
-        sendbufferLen = sprintf(sendbuffer, "pprb=%.1f\nppya=%.1f\nlbrb=%.1f\nlbya=%.1f\n", copyPowerPortRelativeBearing, copyPowerPortGlobalYAngle, copyLoadingBayRelativeBearing, copyLoadingBayGlobalYAngle);
+        sendbufferLen = sprintf(sendbuffer, "pprb=%.1f\nppya=%.1f\nlbrb=%.1f\nlbya=%.1f\n\n", copyPowerPortRelativeBearing, copyPowerPortGlobalYAngle, copyLoadingBayRelativeBearing, copyLoadingBayGlobalYAngle);
       }
       // write response to client
       write(ns, sendbuffer, sendbufferLen);
