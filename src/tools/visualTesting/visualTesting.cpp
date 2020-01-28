@@ -57,7 +57,8 @@ int main() {
   namedWindow(threshWindow, WINDOW_NORMAL);
 
   while(true) {
-    Mat frame, hsv, thresh;	
+    Mat frame, hsv, thresh;
+	
     capture >> frame;
 
     if(frame.empty()) {
