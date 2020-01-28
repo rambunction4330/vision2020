@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8)
-project( cameraTunning )
+project( visualTesting )
 find_package ( OpenCV REQUIRED )
-add_executable( cameraTunning cameraTunning.cpp )
-target_link_libraries ( cameraTunning ${OpenCV_LIBS})
+add_executable( visualTesting visualTesting.cpp )
+target_link_libraries ( visualTesting ${OpenCV_LIBS})
