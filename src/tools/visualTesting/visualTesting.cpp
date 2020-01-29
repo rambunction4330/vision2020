@@ -80,6 +80,8 @@ int main() {
       double matchPowerPort = matchShapes(powerPortTarget, *it, CV_CONTOURS_MATCH_I2, 0);
       double matchLoadingBay = matchShapes(loadingBayTarget, *it, CV_CONTOURS_MATCH_I2, 0);
 
+      cout << matchPowerPort << endl;
+
       if ( matchPowerPort < bestPowerPortMatch && matchPowerPort != 0 && matchPowerPort < matchLoadingBay) {
         bestPowerPortMatch = matchPowerPort;
         powerPortContour = *it;
@@ -102,8 +104,6 @@ int main() {
     double powerPortYAngle = atan((powerPortCenter.y - (height/2)) / focalLength) * (180/M_PI);
     double loadingBayXAngle = atan((loadingBayCenter.x - (width/2)) / focalLength) * (180/M_PI);
     double loadingBayYAngle = atan((loadingBayCenter.y - (height/2)) / focalLength) * (180/M_PI);
-
-    cout << powerPortXAngle << ", " << loadingBayXAngle << endl;
 
     imshow(rawWindow, frame);
     imshow(threshWindow, thresh);

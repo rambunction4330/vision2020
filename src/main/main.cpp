@@ -9,6 +9,8 @@
 #include <semaphore.h>
 #include <iostream>
 #include <opencv2/opencv.hpp>
+#include <mutex>
+#include <thread>
 
 #define PORTNUMBER  9001 
 #define DONOTKNOW 10000000
@@ -16,26 +18,31 @@
 using namespace std;
 using namespace cv;
 
-//added for further changes
+// HSV (Hue, Saturation, Value) thresholds
 const int iLowH = 59;
 const int iHighH = 61;
 const int iLowS = 220; 
 const int iHighS = 255;
 const int iLowV = 115;
 const int iHighV = 135;
+
+// Camera data
 const double horizontalFOV = 70.42;
 const double verticalFOV = 43.3;
 const double diagonalFOV = 78;
+
+// Variables to hold data collected from vision
 double powerPortRelativeBearing = DONOTKNOW;
 double powerPortGlobalYAngle = DONOTKNOW;
 double loadingBayGlobalYAngle = DONOTKNOW;
 double loadingBayRelativeBearing = DONOTKNOW;
-pthread_mutex_t dataLock;
+//pthread_mutex_t dataLock;
+std::mutex dataMutex;
 
 // forward declaration of functions
-void *handleClient(void *arg);
+void handleClient(int&);
 void receiveNextCommand(char*, int);
-void *capture(void *arg);
+void capture(int& arg);
 
 int main(void)
 {
@@ -44,7 +51,8 @@ int main(void)
   int max;
   int number;
   struct sockaddr_in name;
-  pthread_mutex_init(&dataLock, NULL);
+  //pthread_mutex_init(&dataLock, NULL);
+  //mutex = std::mutex();
 
   // create the socket
   if ( (s = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
@@ -84,12 +92,15 @@ int main(void)
     exit(1);
   }
  
-  pthread_t captureThreadId;
+  //pthread_t captureThreadId;
   int i = 3;
-  int captureThread = pthread_create(&captureThreadId, NULL, capture, (void*)&i);
+  //int captureThread = pthread_create(&captureThreadId, NULL, capture, (void*)&i);
+
+  std::thread captureThread(capture, std::ref(i));
 
   // it is important to detach the thread to avoid memory leak
-  pthread_detach(captureThreadId);
+  //pthread_detach(captureThreadId);
+  captureThread.detach();
 
   while(true) {
 
@@ -104,29 +115,47 @@ int main(void)
     // each client connection is handled by a seperate thread since
     // a single client can hold a connection open indefinitely making multiple
     // data requests prior to closing the connection
-    pthread_t threadId;
-    int thread = pthread_create(&threadId, NULL, handleClient, (void*) &ns);
+    //pthread_t threadId;
+    //int thread = pthread_create(&threadId, NULL, handleClient, (void*) &ns);
+    std::thread childThread(handleClient, std::ref(ns));
+
     // it is important to detach the thread to avoid a memory leak
-    pthread_detach(threadId);
+    //pthread_detach(threadId);
+    childThread.detach();
   } 
   
   close(s);
   exit(0);
 }
 
-void *capture(void *arg) {  
+void capture(int& i) {  
 
+  // Define capture device (camera)
   VideoCapture capture(0);
+
+  // Run setup shellscript to:
+    // Set brightness to min
+    // Set contrast to max
+    // Set saturation to max
+    // Set gain to min
+    // Set sharpnes to min
+    // Set staic exposer
+    // Shift White balance
   system("../startCam.sh");
 
+  // Make sure camera is connected
   if(!capture.isOpened()) {
     cout << "Failed to connect to the camera." << endl;
   }
+
+  // Get the camera frams height and width
   double width = capture.get(CAP_PROP_FRAME_WIDTH);
   double height = capture.get(CAP_PROP_FRAME_HEIGHT);
+
+  // Calculate the camera focal length in pixles
   double focalLength = (width/2)/(tan(((horizontalFOV * (M_PI/180))/2)));
 
-  //Ideal shape of high goal reflective tape.
+  // Comparison shape for power port vision target
   std::vector<Point> powerPortTarget;
   powerPortTarget.push_back(Point2d(0,17));
   powerPortTarget.push_back(Point2d(9.805,0));
@@ -138,6 +167,7 @@ void *capture(void *arg) {
   powerPortTarget.push_back(Point2d(2.309,17));
   powerPortTarget.push_back(Point2d(0,17));
   
+  // Comparison shape for loading bay vision target
   std::vector<Point> loadingBayTarget;
   loadingBayTarget.push_back(Point2d(0,0));
   loadingBayTarget.push_back(Point2d(0,11));
@@ -145,22 +175,34 @@ void *capture(void *arg) {
   loadingBayTarget.push_back(Point2d(7,0));
   loadingBayTarget.push_back(Point2d(0,0));
 
-//  String rawWindow = "Raw";
-//  String threshWindow = "Thresh";
-//  namedWindow(rawWindow, WINDOW_NORMAL);
-//  namedWindow(threshWindow, WINDOW_NORMAL);
+  // Uncomment for debugging
+  // Defines windows for debugging
+  //  String rawWindow = "Raw";
+  //  String threshWindow = "Thresh";
+  //  namedWindow(rawWindow, WINDOW_NORMAL);
+  //  namedWindow(threshWindow, WINDOW_NORMAL);
 
   while(true) {
-    Mat frame, hsv, thresh;	
+    // Declare Mats
+    Mat frame, hsv, thresh;
+
+    // Get the current frame from the camer	
     capture >> frame;
 
+    // Cheak to be sure it is still getting camer data
     if(frame.empty()) {
       cout << "failed to capture an image" << endl;
     }
      
+    // Convert into HSV color space for better thresholding
     cvtColor(frame, hsv, CV_BGR2HSV);
+    // Threshold the frame into black and white image
+    // All pixles within range are pure white
+    // All pixles out of the threshold are pure black
     inRange(hsv, Scalar(iLowH, iLowS, iLowV), Scalar(iHighH, iHighS, iHighV), thresh);
 
+    // Find all the contours in the thresholded image and hold them in vector
+    // Only finds external contours
     std::vector < std::vector<Point> > contours;
     findContours(thresh, contours, RETR_EXTERNAL, CHAIN_APPROX_NONE);
     
@@ -169,37 +211,47 @@ void *capture(void *arg) {
     std::vector<Point> powerPortContour;
     std::vector<Point> loadingBayContour;
 
+    // Iterate over all he vectors to find which ones are which targets
     for (vector< vector<Point> >::iterator it = contours.begin(); it != contours.end(); ++it) {
+      // Cheak how well they match each shape. Lower numbers are better. 0 is best.
       double matchPowerPort = matchShapes(powerPortTarget, *it, CV_CONTOURS_MATCH_I2, 0);
       double matchLoadingBay = matchShapes(loadingBayTarget, *it, CV_CONTOURS_MATCH_I2, 0);
 
-      if ( matchPowerPort < bestPowerPortMatch && matchPowerPort != 0 && matchPowerPort < matchLoadingBay) {
+      // Assign each contour to whichver shape in matches best filtering out any single points due to noise
+      if ( matchPowerPort < bestPowerPortMatch && matchPowerPort < matchLoadingBay& & matchPowerPort != 0) {
         bestPowerPortMatch = matchPowerPort;
         powerPortContour = *it;
       }
-      if ( matchLoadingBay < bestLoadingBayMatch && matchLoadingBay != 0 && matchLoadingBay < matchPowerPort) {
+      if ( matchLoadingBay < bestLoadingBayMatch && matchLoadingBay < matchPowerPort && matchLoadingBay != 0) {
         bestLoadingBayMatch = matchLoadingBay;
         loadingBayContour = *it;
         
       }
     }
 
+    // Calculate contour moments, and the center for each contour
     Moments powerPortMoms = moments(Mat(powerPortContour));
     Moments loadingBayMoms = moments(Mat(loadingBayContour));
     Point2d powerPortCenter(powerPortMoms.m10/powerPortMoms.m00, powerPortMoms.m01/powerPortMoms.m00);
     Point2d loadingBayCenter(loadingBayMoms.m10/loadingBayMoms.m00, loadingBayMoms.m01/loadingBayMoms.m00);
+
+    // Find the angle from the camera to the center of the image
     double powerPortXAngle = atan((powerPortCenter.x - (width/2)) / focalLength) * (180/M_PI);
     double powerPortYAngle = atan((powerPortCenter.y - (height/2)) / focalLength) * (180/M_PI);
     double loadingBayXAngle = atan((loadingBayCenter.x - (width/2)) / focalLength) * (180/M_PI);
     double loadingBayYAngle = atan((loadingBayCenter.y - (height/2)) / focalLength) * (180/M_PI);
 
     // obtain the lock and copy the data
-    pthread_mutex_lock(&dataLock);
+    //pthread_mutex_lock(&dataLock);
+    dataMutex.lock();
+
     powerPortRelativeBearing = powerPortXAngle;
     powerPortGlobalYAngle = powerPortYAngle;
     loadingBayRelativeBearing = loadingBayXAngle;
     loadingBayGlobalYAngle = loadingBayYAngle;
-    pthread_mutex_unlock(&dataLock);
+
+    //pthread_mutex_unlock(&dataLock);
+    dataMutex.unlock();
 
 //    cout << powerPortXAngle << ", " << loadingBayXAngle << endl;
 
@@ -215,9 +267,9 @@ void *capture(void *arg) {
 
 
 
-void *handleClient(void *arg) {
+void handleClient(int& ns) {
   // printf("Thread starting\n");
-  int ns = *((int*) arg);
+  //int ns = *((int*) arg);
   char sendbuffer[1024];
   char command[128];
 
@@ -233,12 +285,16 @@ void *handleClient(void *arg) {
       //printf("Received DATA command\n");
 
       // obtain the lock and copy the data
-      pthread_mutex_lock(&dataLock);
+      //pthread_mutex_lock(&dataLock);
+      dataMutex.lock();
+
       double copyPowerPortRelativeBearing = powerPortRelativeBearing;
       double copyPowerPortGlobalYAngle = powerPortGlobalYAngle;
       double copyLoadingBayRelativeBearing = loadingBayRelativeBearing;
       double copyLoadingBayGlobalYAngle = loadingBayGlobalYAngle;
-      pthread_mutex_unlock(&dataLock);
+
+      //pthread_mutex_unlock(&dataLock);
+      dataMutex.unlock();
 
       // the protocol will send an empty line when the data transfer is complete
       int sendbufferLen = -1;
@@ -261,7 +317,6 @@ void *handleClient(void *arg) {
   }
   close(ns);
   //printf("Thread ending\n");
-  return 0;
 }
 
 void receiveNextCommand(char *command, int ns) {
