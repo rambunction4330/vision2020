@@ -133,16 +133,6 @@ void capture(int& i) {
   // Define capture device (camera)
   VideoCapture capture(0);
 
-  // Run setup shellscript to:
-    // Set brightness to min
-    // Set contrast to max
-    // Set saturation to max
-    // Set gain to min
-    // Set sharpnes to min
-    // Set staic exposer
-    // Shift White balance
-  system("../startCam.sh");
-
   // Make sure camera is connected
   if(!capture.isOpened()) {
     cout << "Failed to connect to the camera." << endl;

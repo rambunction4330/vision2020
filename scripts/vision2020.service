@@ -1,0 +1,10 @@
+[Unit]
+Description=vision2020 service
+Wants=dev-video0.device
+After=dev-video0.device
+
+[Service]
+ExecStart=/bin/bash /home/nvidia/vision/vision2020/src/main/start.sh
+
+[Install]
+WantedBy=multi-user.target

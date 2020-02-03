@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 v4l2-ctl --device 0 --set-ctrl brightness=0
 v4l2-ctl --device 0 --set-ctrl contrast=255
 v4l2-ctl --device 0 --set-ctrl saturation=255
