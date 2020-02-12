@@ -27,16 +27,15 @@ const int iLowV = 115;
 const int iHighV = 135;
 
 // Camera data units in degrees and meters
-const double horizontalFOV = 70.42;
-const double verticalFOV = 43.3;
-const double diagonalFOV = 78;
-const double mountYAngle = 0.0;
+const double horizontalFOV = 51.43;
+const double verticalFOV = 20;
+const double mountYAngle = -6;
 const double mountXAngle = 0.0;
-const double mountHeight = 0.0;
+const double mountHeight = 0.672;
 
 //Target data units in meters
 const double powerPortHeight = 0.0;
-const double loadingBayHeight = 0.0;
+const double loadingBayHeight = 0.564;
 
 // Variables to hold data collected from vision
 double powerPortRelativeBearing = DONOTKNOW;
@@ -55,7 +54,7 @@ void capture(int& arg);
 
 int main(void)
 {
-  int n, s;190
+  int n, s;
   socklen_t len;
   int max;
   int number;
@@ -241,8 +240,8 @@ void capture(int& i) {
     double loadingBayYAngle = atan((loadingBayCenter.y - (height/2)) / focalLength) * (180/M_PI) + mountYAngle;
 
     //using Y angle find the distance from the target
-    double powerPortDistance = (powerPortHeight - mountHeight) / (tan(abs(powerPortYAngle)));
-    double loadingBayDistance = (loadingBayHeight - mountHeight) / (tan(abs(loadingBayYAngle)));
+    double powerPortDistance = (powerPortHeight - mountHeight) / (tan(powerPortYAngle * (M_PI/180)));
+    double loadingBayDistance = (loadingBayHeight - mountHeight) / (tan(loadingBayYAngle * (M_PI/180)));
 
     // obtain the lock and copy the data
     //pthread_mutex_lock(&dataLock);
